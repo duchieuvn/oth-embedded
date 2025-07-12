@@ -1,8 +1,6 @@
 import pygame
 import pandas as pd
 import numpy as np
-import math
-import time
 
 # Load data
 df = pd.read_csv("position_estimation.csv")
