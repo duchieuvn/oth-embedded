@@ -62,13 +62,13 @@ BLACK = (0, 0, 0)
 # === Particle Filter Params ===
 NUM_PARTICLES = 100
 SENSOR_NOISE = 8.0
-MOVE_NOISE = 0.3
+MOVE_NOISE = 0.5
 
 particles = np.empty((NUM_PARTICLES, 4))  # [x, y, theta, weight]
-PARTICLE_STD = 5 #pixel
-particles[:, 0] = np.random.normal(loc=pos_x[0], scale=PARTICLE_STD, size=NUM_PARTICLES)
-particles[:, 1] = np.random.normal(loc=pos_y[0], scale=PARTICLE_STD, size=NUM_PARTICLES)
-particles[:, 2] = np.random.uniform(0, 2 * np.pi, NUM_PARTICLES)
+PARTICLE_STD = 12 #pixel
+particles[:, 0] = np.random.normal(loc=pos_x[0]*PIXEL_PER_METER, scale=PARTICLE_STD, size=NUM_PARTICLES)
+particles[:, 1] = np.random.normal(loc=pos_y[0]*PIXEL_PER_METER, scale=PARTICLE_STD, size=NUM_PARTICLES)
+particles[:, 2] = np.random.normal(0, 2 * np.pi, NUM_PARTICLES)
 particles[:, 3] = 1.0 / NUM_PARTICLES
 
 def move_particles(particles, vx, vy, dt):
