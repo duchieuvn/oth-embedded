@@ -1,74 +1,90 @@
 import pygame
-import pandas as pd
 import numpy as np
+import pandas as pd
+import time
 
-# Load dữ liệu
-df = pd.read_csv("data_record/data.csv")
-acc_y = df['acc_y'].to_numpy()
-acc_z = df['acc_z'].to_numpy()
-
-# Pygame setup
+# === Pygame init ===
 WIDTH, HEIGHT = 600, 600
 CENTER = (WIDTH // 2, HEIGHT // 2)
-SCALE = 150  # Phóng đại vector để nhìn rõ
-FPS = 10     # Số frame/giây
+ARROW_LENGTH = 100
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Acceleration Vector (Z-Y Plane)")
+pygame.display.set_caption("2 Arrows - Different Initial Yaw")
 clock = pygame.time.Clock()
 
-# Màu
+# === Colors ===
 WHITE = (255, 255, 255)
-GRAY = (180, 180, 180)
+BLUE = (0, 0, 255)
 RED = (255, 0, 0)
 
-# Vẽ mũi tên từ start đến end (với đầu mũi tên)
-def draw_arrow(surface, start, end, color=(255, 0, 0), arrow_size=10):
-    pygame.draw.line(surface, color, start, end, 3)
-    # Tính vector hướng
-    dx = end[0] - start[0]
-    dy = end[1] - start[1]
-    angle = np.arctan2(dy, dx)
-    # Vẽ đầu mũi tên (2 nhánh)
-    left = (
-        end[0] - arrow_size * np.cos(angle - np.pi / 6),
-        end[1] - arrow_size * np.sin(angle - np.pi / 6)
-    )
-    right = (
-        end[0] - arrow_size * np.cos(angle + np.pi / 6),
-        end[1] - arrow_size * np.sin(angle + np.pi / 6)
-    )
-    pygame.draw.line(surface, color, end, left, 3)
-    pygame.draw.line(surface, color, end, right, 3)
+# === Rotation matrix around Y ===
+def rotation_matrix_y(angle):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([
+        [ c, 0,  s],
+        [ 0, 1,  0],
+        [-s, 0,  c]
+    ])
 
-# Vòng lặp hiển thị từng vector như mũi tên
-i = 0
+# === Load data and hoán đổi trục ===
+df = pd.read_csv("data_record/data.csv")  # chứa 'timestamp', 'gyro_y', 'gyro_z'
+
+gyro_y = df['gyro_y'].to_numpy()
+timestamp = df['timestamp'].to_numpy()
+dt = np.diff(timestamp, prepend=timestamp[0]) / 1000.0  # ms → s
+
+# === Tính delta yaw ===
+delta_yaw = gyro_y * dt
+
+# === Hai chuỗi góc yaw với góc lệch ban đầu khác nhau ===
+yaw1 = np.zeros_like(delta_yaw)
+yaw2 = np.zeros_like(delta_yaw)
+yaw1[0] = np.deg2rad(-90)
+yaw2[0] = np.deg2rad(-40)
+
+yaw1[1:] = yaw1[:-1]  + delta_yaw[1:]  
+yaw2[1:] = yaw2[:-1]  + delta_yaw[1:]
+
+print(yaw1[0:90:15])
+print(yaw2[0:90:15])
+
+# === Main loop ===
+i = 50
 running = True
-while running and i < len(acc_y):
+while running:
+    screen.fill(WHITE)
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
-    screen.fill(WHITE)
+    if i >= len(yaw1):
+        break
 
-    # Vẽ trục toạ độ
-    pygame.draw.line(screen, GRAY, (CENTER[0], 0), (CENTER[0], HEIGHT), 1)  # Z (thẳng đứng)
-    pygame.draw.line(screen, GRAY, (0, CENTER[1]), (WIDTH, CENTER[1]), 1)   # Y (nằm ngang)
+    avg_delta = np.mean(delta_yaw[i-50:i])
+    yaw1[i] = yaw1[i-50] + avg_delta
+    yaw2[i] = yaw2[i-50] + avg_delta
+    print(f"Yaw1[{i}]: {np.rad2deg(yaw1[i]):.2f}°, Yaw2[{i}]: {np.rad2deg(yaw2[i]):.2f}°")
+    print(f"yaw1[i-1]: {np.rad2deg(yaw1[i-1]):.2f}°, yaw2[{i-1}]: {np.rad2deg(yaw2[i]):.2f}°")
+    print("--------------------")
+    vec_body = np.array([1, 0, 0])  # hướng trục x
 
-    # Lấy giá trị hiện tại
-    ay = acc_y[i]
-    az = acc_z[i]
+    # Arrow 1 (BLUE) -90°
+    R1 = rotation_matrix_y(yaw1[i])
+    vec_world1 = R1 @ vec_body
+    dx1, dz1 = vec_world1[0], vec_world1[2]
+    end1 = (CENTER[0] + ARROW_LENGTH * dx1, CENTER[1] + ARROW_LENGTH * dz1)
+    pygame.draw.line(screen, BLUE, CENTER, end1, 4)
 
-    # Tính vị trí đầu mũi tên
-    end_x = CENTER[0] + int(az * SCALE)
-    end_y = CENTER[1] - int(ay * SCALE)
-
-    # Vẽ mũi tên
-    draw_arrow(screen, CENTER, (end_x, end_y), RED)
+    # Arrow 2 (RED) -40°
+    R2 = rotation_matrix_y(yaw2[i])
+    vec_world2 = R2 @ vec_body
+    dx2, dz2 = vec_world2[0], vec_world2[2]
+    end2 = (CENTER[0] + ARROW_LENGTH * dx2, CENTER[1] + ARROW_LENGTH * dz2)
+    pygame.draw.line(screen, RED, CENTER, end2, 4)
 
     pygame.display.flip()
-    clock.tick(FPS)
-    i += 1
+    clock.tick(10)
+    i += 50
 
 pygame.quit()
