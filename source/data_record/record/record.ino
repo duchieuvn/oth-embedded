@@ -1,9 +1,12 @@
 #include <ArduinoBLE.h>
 #include <Arduino_BMI270_BMM150.h>
 
+const int BATCH_SIZE = 10;
+String dataBuffer = "";
+
 void setup() {
   Serial.begin(115200);
-  while (!Serial);  // Wait for serial connection
+  while (!Serial);
 
   if (!BLE.begin()) {
     Serial.println("BLE init failed!");
@@ -29,42 +32,51 @@ const unsigned long BLE_SCAN_INTERVAL = 1000;  // milliseconds
 bool found_watch = false;
 bool found_iphone = false;
 
+int batchCount = 0;
+
 void loop() {
-  // Scan for BLE each 1000ms
-  if (millis() - lastBLEScan >= BLE_SCAN_INTERVAL) {
-    BLEDevice device = BLE.available();
-    found_watch = false; 
-    found_iphone = false;  
+  // if (millis() - lastBLEScan >= BLE_SCAN_INTERVAL) {
+  //   BLE.scan();
+  //   BLEDevice device = BLE.available();
+  //   found_watch = false;
+  //   found_iphone = false;
 
-    while (device) {
-      String address = device.address();
-      String name = device.localName();
+  //   while (device) {
+  //     String address = device.address();
+  //     String name = device.localName();
 
-      if (!found_watch && address == my_watch) {
-          rssi_watch = device.rssi();
-          found_watch = true;
-      }
-      if (!found_iphone && name == iphone_name) {
-          rssi_iphone = device.rssi();
-          found_iphone = true;
-      }
-      if (found_watch && found_iphone) {
-        break;
-      }
-      
-      device = BLE.available();
-    }
-    lastBLEScan = millis();
-  }
+  //     if (!found_watch && address == my_watch) {
+  //       rssi_watch = device.rssi();
+  //       found_watch = true;
+  //     }
+  //     if (!found_iphone && name == iphone_name) {
+  //       rssi_iphone = device.rssi();
+  //       found_iphone = true;
+  //     }
+  //     if (found_watch && found_iphone) break;
 
-  // Read and print IMU data
+  //     device = BLE.available();
+  //   }
+
+  //   lastBLEScan = millis();
+  // }
+
+  // Read and buffer IMU data
   if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
     IMU.readAcceleration(acc_x, acc_y, acc_z);
     IMU.readGyroscope(gyro_x, gyro_y, gyro_z);
 
-    char buffer[128];
-    snprintf(buffer, sizeof(buffer), "%lu,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d",
-         millis(), acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z, rssi_watch, rssi_iphone);
-    Serial.println(buffer);
+    char line[128];
+    snprintf(line, sizeof(line), "%lu,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%d\n",
+             millis(), acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z, rssi_watch, rssi_iphone);
+
+    dataBuffer += line;
+    batchCount++;
+
+    if (batchCount >= BATCH_SIZE) {
+      Serial.print(dataBuffer);    
+      dataBuffer = "";           
+      batchCount = 0;
+    }
   }
 }

@@ -6,53 +6,49 @@ import pandas as pd
 PIXEL_PER_METER = 50
 MAP_WIDTH_PX = int(13.2 * PIXEL_PER_METER)
 MAP_HEIGHT_PX = int(12.5 * PIXEL_PER_METER)
-SCALE = 1
 
 # === Load IMU Data and Compute Velocity & Position ===
-imu_df = pd.read_csv("position_estimation.csv")
+imu_df = pd.read_csv("data_record/data.csv")
 timestamp = imu_df['timestamp'].to_numpy() / 1000.0
-accel_x = imu_df['accel_x'].to_numpy()
-accel_y = imu_df['accel_y'].to_numpy()
+acc_x = imu_df['acc_x'].to_numpy()
+acc_y = imu_df['acc_y'].to_numpy()
+acc_z = imu_df['acc_z'].to_numpy()
 
-# === Initialize Variables ===
 dt = np.diff(timestamp, prepend=timestamp[0])
-vel_x = np.zeros_like(accel_x)
-vel_y = np.zeros_like(accel_y)
-pos_x = np.zeros_like(accel_x)
-pos_y = np.zeros_like(accel_y)
+vel_x = np.zeros_like(acc_x)
+vel_z = np.zeros_like(acc_z)
+pos_x = np.zeros_like(acc_x)
+pos_z = np.zeros_like(acc_z)
 
-# === Set Initial Position (in meters, not pixels) ===
-pos_x[0] = 6.0 # Initial x position in meters
-pos_y[0] = 6.0
+pos_x[0] = 6.0
+pos_z[0] = 6.0
 
-# === Compute Velocity and Position Step-by-Step ===
 for i in range(1, len(timestamp)):
-    vel_x[i] = vel_x[i - 1] + accel_x[i] * dt[i]
-    vel_y[i] = vel_y[i - 1] + accel_y[i] * dt[i]
+    vel_x[i] = vel_x[i - 1] + acc_x[i] * dt[i]
+    vel_z[i] = vel_z[i - 1] + acc_z[i] * dt[i]
     pos_x[i] = pos_x[i - 1] + vel_x[i] * dt[i]
-    pos_y[i] = pos_y[i - 1] + vel_y[i] * dt[i]
-# === Save processed data to CSV ===
+    pos_z[i] = pos_z[i - 1] + vel_z[i] * dt[i]
+
+# Save to CSV
 output_df = pd.DataFrame({
     'timestamp': timestamp,
-    'accel_x': accel_x,
-    'accel_y': accel_y,
+    'acc_x': acc_x,
+    'acc_y': acc_y,
+    'acc_z': acc_z,
     'vel_x': vel_x,
-    'vel_y': vel_y,
+    'vel_z': vel_z,
     'pos_x': pos_x,
-    'pos_y': pos_y
+    'pos_z': pos_z
 })
-
 output_df.to_csv("processed_motion_data.csv", index=False)
 print("Saved processed motion data to processed_motion_data.csv")
-
 
 # === Pygame Init ===
 pygame.init()
 screen = pygame.display.set_mode((MAP_WIDTH_PX, MAP_HEIGHT_PX))
-pygame.display.set_caption("2D Particle Filter from Measurement")
+pygame.display.set_caption("2D Particle Filter on X-Z Plane")
 clock = pygame.time.Clock()
 
-# === Colors ===
 WHITE = (255, 255, 255)
 GRAY = (100, 100, 100)
 BLUE = (0, 0, 255)
@@ -63,24 +59,24 @@ BLACK = (0, 0, 0)
 NUM_PARTICLES = 100
 SENSOR_NOISE = 8.0
 MOVE_NOISE = 0.5
+PARTICLE_STD = 12
 
-particles = np.empty((NUM_PARTICLES, 4))  # [x, y, theta, weight]
-PARTICLE_STD = 12 #pixel
+particles = np.empty((NUM_PARTICLES, 4))  # [x, z, theta, weight]
 particles[:, 0] = np.random.normal(loc=pos_x[0]*PIXEL_PER_METER, scale=PARTICLE_STD, size=NUM_PARTICLES)
-particles[:, 1] = np.random.normal(loc=pos_y[0]*PIXEL_PER_METER, scale=PARTICLE_STD, size=NUM_PARTICLES)
+particles[:, 1] = np.random.normal(loc=pos_z[0]*PIXEL_PER_METER, scale=PARTICLE_STD, size=NUM_PARTICLES)
 particles[:, 2] = np.random.normal(0, 2 * np.pi, NUM_PARTICLES)
 particles[:, 3] = 1.0 / NUM_PARTICLES
 
-def move_particles(particles, vx, vy, dt):
+def move_particles(particles, vx, vz, dt):
     vx_n = vx + np.random.normal(0, MOVE_NOISE, NUM_PARTICLES)
-    vy_n = vy + np.random.normal(0, MOVE_NOISE, NUM_PARTICLES)
+    vz_n = vz + np.random.normal(0, MOVE_NOISE, NUM_PARTICLES)
     particles[:, 0] += vx_n * dt * PIXEL_PER_METER
-    particles[:, 1] += vy_n * dt * PIXEL_PER_METER
+    particles[:, 1] += vz_n * dt * PIXEL_PER_METER
 
 def update_weights(particles, z):
     dx = particles[:, 0] - z[0]
-    dy = particles[:, 1] - z[1]
-    dist2 = dx**2 + dy**2
+    dz = particles[:, 1] - z[1]
+    dist2 = dx**2 + dz**2
     weights = np.exp(-dist2 / (2 * SENSOR_NOISE**2))
     weights += 1e-300
     weights /= np.sum(weights)
@@ -94,8 +90,8 @@ def resample(particles):
 
 def estimate(particles):
     x = np.average(particles[:, 0], weights=particles[:, 3])
-    y = np.average(particles[:, 1], weights=particles[:, 3])
-    return np.array([x, y])
+    z = np.average(particles[:, 1], weights=particles[:, 3])
+    return np.array([x, z])
 
 # === Main Loop ===
 i = 0
@@ -109,33 +105,24 @@ while running:
     if i >= len(timestamp):
         break
 
-    # Measurement (converted to pixels)
     meas_x = pos_x[i] * PIXEL_PER_METER
-    meas_y = pos_y[i] * PIXEL_PER_METER
+    meas_z = pos_z[i] * PIXEL_PER_METER
     vx = vel_x[i]
-    vy = vel_y[i]
+    vz = vel_z[i]
     dt_i = dt[i]
     i += 1
 
-    print("Position:", pos_x[i], pos_y[i])
-    print(f"Measurement at {meas_x:.2f}, {meas_y:.2f}")
-
-    move_particles(particles, vx, vy, dt_i)
-    update_weights(particles, [meas_x, meas_y])
+    move_particles(particles, vx, vz, dt_i)
+    update_weights(particles, [meas_x, meas_z])
     particles = resample(particles)
     est = estimate(particles)
 
-    # Draw map border
     pygame.draw.rect(screen, BLACK, pygame.Rect(0, 0, MAP_WIDTH_PX, MAP_HEIGHT_PX), 2)
 
-    # Draw particles
     for p in particles:
         pygame.draw.circle(screen, GRAY, (int(p[0]), int(p[1])), 1)
 
-    # Draw measurement
-    pygame.draw.circle(screen, BLUE, (int(meas_x), int(meas_y)), 5)
-
-    # Draw estimated position
+    pygame.draw.circle(screen, BLUE, (int(meas_x), int(meas_z)), 5)
     pygame.draw.circle(screen, YELLOW, (int(est[0]), int(est[1])), 5)
 
     pygame.display.flip()
