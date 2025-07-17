@@ -35,32 +35,6 @@ bool found_iphone = false;
 int batchCount = 0;
 
 void loop() {
-  // if (millis() - lastBLEScan >= BLE_SCAN_INTERVAL) {
-  //   BLE.scan();
-  //   BLEDevice device = BLE.available();
-  //   found_watch = false;
-  //   found_iphone = false;
-
-  //   while (device) {
-  //     String address = device.address();
-  //     String name = device.localName();
-
-  //     if (!found_watch && address == my_watch) {
-  //       rssi_watch = device.rssi();
-  //       found_watch = true;
-  //     }
-  //     if (!found_iphone && name == iphone_name) {
-  //       rssi_iphone = device.rssi();
-  //       found_iphone = true;
-  //     }
-  //     if (found_watch && found_iphone) break;
-
-  //     device = BLE.available();
-  //   }
-
-  //   lastBLEScan = millis();
-  // }
-
   // Read and buffer IMU data
   if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
     IMU.readAcceleration(acc_x, acc_y, acc_z);
